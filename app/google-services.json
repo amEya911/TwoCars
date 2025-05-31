@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "334253316680",
+    "project_id": "collectdodge",
+    "storage_bucket": "collectdodge.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:334253316680:android:b334c03a9e2af7c343567d",
+        "android_client_info": {
+          "package_name": "eu.tutorials.twocars"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCoeljd4BIzUsTcFUle4-pJRP7ZbWgHrfE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
