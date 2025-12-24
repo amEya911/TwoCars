@@ -4,9 +4,9 @@ import android.util.Log
 import androidx.compose.material3.ColorScheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.ui.graphics.Color
-import com.google.firebase.ktx.Firebase
+import com.google.firebase.Firebase
 import com.google.firebase.remoteconfig.FirebaseRemoteConfig
-import com.google.firebase.remoteconfig.ktx.remoteConfig
+import com.google.firebase.remoteconfig.remoteConfig
 import eu.tutorials.twocars.data.model.RemoteBackground
 import eu.tutorials.twocars.data.model.SeparationTime
 import eu.tutorials.twocars.ui.theme.GameBackground
