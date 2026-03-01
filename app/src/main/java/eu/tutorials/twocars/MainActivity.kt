@@ -40,20 +40,7 @@ class MainActivity : ComponentActivity() {
         WindowCompat.setDecorFitsSystemWindows(window, false)
         val frameDelay = getFrameDelay()
 
-        val remoteConfig = FirebaseRemoteConfig.getInstance()
-        val configSettings = remoteConfigSettings {
-            minimumFetchIntervalInSeconds = 0
-        }
-        remoteConfig.setConfigSettingsAsync(configSettings)
-
         setContent {
-            LaunchedEffect(Unit) {
-                remoteConfig.fetchAndActivate().addOnCompleteListener {
-                    if (it.isSuccessful) {
-                    } else {
-                    }
-                }
-            }
             AppTheme {
                 Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
                     AppNavGraph(modifier = Modifier.padding(innerPadding))

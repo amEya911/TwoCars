@@ -132,15 +132,21 @@ val haas = darkColorScheme(
     tertiary = Color(0xFFFFFFFF) // White
 )
 
-val alfaRomeo = darkColorScheme(
-    primary = Color(0xFF900000), // Deep Red
-    secondary = Color(0xFFFFFFFF), // White
-    tertiary = Color(0xFF000000) // Black
-)
-
-val visaRb = darkColorScheme(
+val racingBulls = darkColorScheme(
     primary = Color(0xFF6D28D9), // Purple/Indigo
     secondary = Color(0xFF141414), // Deep Black
+    tertiary = Color(0xFFFFFFFF) // White
+)
+
+val audi = darkColorScheme(
+    primary = Color(0xFFBB0A1E), // Audi Red
+    secondary = Color(0xFF000000), // Black
+    tertiary = Color(0xFFD9D9D9) // Silver
+)
+
+val cadillac = darkColorScheme(
+    primary = Color(0xFF1A1A2E), // Dark Navy
+    secondary = Color(0xFFC8A951), // Gold
     tertiary = Color(0xFFFFFFFF) // White
 )
 
@@ -153,8 +159,9 @@ enum class GameBackground(val url: String) {
     ALPINE("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/alpine1.jpg?alt=media&token=c1b9d7cc-b45a-4fc7-9ce8-a4f926e67a16"),
     WILLIAMS("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/williams1.jpg?alt=media&token=6716eaba-8b5c-4e66-bf86-a46250ba21e1"),
     HAAS("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/haas1.jpg?alt=media&token=b567d33e-6499-4fe0-ad52-1204523ecb61"),
-    ALFA_ROMEO("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/alphaRomeo1.jpg?alt=media&token=d36ebca7-b516-4e72-8f79-b09dfd6eb40b"),
-    VISA_RB("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/visaCashAppRB1.jpg?alt=media&token=37ac03d5-83fd-473c-973e-41eb72799559")
+    RACING_BULLS("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/visaCashAppRB1.jpg?alt=media&token=37ac03d5-83fd-473c-973e-41eb72799559"),
+    AUDI("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/alphaRomeo1.jpg?alt=media&token=d36ebca7-b516-4e72-8f79-b09dfd6eb40b"),
+    CADILLAC("https://firebasestorage.googleapis.com/v0/b/collectdodge.firebasestorage.app/o/alphaRomeo1.jpg?alt=media&token=d36ebca7-b516-4e72-8f79-b09dfd6eb40b")
 }
 
 fun getGameTheme(gameId: String?): ColorScheme {
@@ -167,8 +174,9 @@ fun getGameTheme(gameId: String?): ColorScheme {
         GameBackground.ALPINE.name -> alpine
         GameBackground.WILLIAMS.name -> williams
         GameBackground.HAAS.name -> haas
-        GameBackground.ALFA_ROMEO.name -> alfaRomeo
-        GameBackground.VISA_RB.name -> visaRb
+        GameBackground.RACING_BULLS.name -> racingBulls
+        GameBackground.AUDI.name -> audi
+        GameBackground.CADILLAC.name -> cadillac
         else -> mercedes
     }
 }

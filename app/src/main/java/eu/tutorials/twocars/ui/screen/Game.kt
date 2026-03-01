@@ -34,6 +34,7 @@ import androidx.compose.ui.input.pointer.changedToUp
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
+import eu.tutorials.twocars.data.state.GameState
 import eu.tutorials.twocars.ui.component.LaunchCarAnimation
 import eu.tutorials.twocars.util.Car
 import eu.tutorials.twocars.util.Shape.drawShapes
@@ -42,11 +43,11 @@ import eu.tutorials.twocars.ui.component.GameOverLayout
 @Composable
 fun Game(
     modifier: Modifier = Modifier,
-    viewModel: GameViewModel = hiltViewModel(),
+    viewModel: GameViewModel,
+    gameState: GameState,
     navController: NavController,
     gameId: String?
 ) {
-    val gameState = viewModel.gameState.collectAsState().value
     val coroutineScope = rememberCoroutineScope()
 
     val carBitmap = ImageBitmap.imageResource(R.drawable.formula_1)
@@ -55,7 +56,6 @@ fun Game(
     val car1Rotation = remember { Animatable(0f) }
     val car2Rotation = remember { Animatable(0f) }
     val carColor = MaterialTheme.colorScheme.primary
-
 
     var canvasWidth by remember { mutableStateOf(0f) }
     val paddingBottom = with(LocalDensity.current) { 64.dp.toPx() }

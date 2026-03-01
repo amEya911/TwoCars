@@ -1,14 +1,15 @@
 package eu.tutorials.twocars.ui.viewmodel
 
-import android.app.Activity
-import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.google.firebase.remoteconfig.FirebaseRemoteConfig
 import dagger.hilt.android.lifecycle.HiltViewModel
 import eu.tutorials.twocars.data.datasource.local.DataStore
 import eu.tutorials.twocars.data.event.GameEvent
-import eu.tutorials.twocars.data.model.SeparationTime
-import eu.tutorials.twocars.data.state.*
+import eu.tutorials.twocars.data.state.GameState
+import eu.tutorials.twocars.data.state.Shape
+import eu.tutorials.twocars.data.state.ShapeType
+import eu.tutorials.twocars.util.FirebaseUtils
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -20,10 +21,11 @@ import kotlin.random.Random
 @HiltViewModel
 class GameViewModel @Inject constructor(
     private val dataStore: DataStore,
-    separationTime: SeparationTime
+    remoteConfig: FirebaseRemoteConfig
 ) : ViewModel() {
 
-    private val separationTime1 = separationTime.separationTime
+    private val separationTime1 =
+        FirebaseUtils.getSeparationTimeConfig(remoteConfig).separationTime
 
     private val _gameState = MutableStateFlow(GameState(separationTime = separationTime1))
     val gameState: StateFlow<GameState> = _gameState
