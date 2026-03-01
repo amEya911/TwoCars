@@ -22,7 +22,7 @@ data class GameState(
     val comboCount: Int = 0,
     val comboMultiplier: Int = 1,
     val lastCollectTimeMs: Long = 0L,
-    val comboWindowMs: Long = 2000L,
+    val comboWindowMs: Long = 1000L,
 
     // Power-ups
     val activePowerUp: PowerUpType? = null,

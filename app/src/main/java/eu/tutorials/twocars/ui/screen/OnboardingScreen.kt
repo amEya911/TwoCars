@@ -1,20 +1,11 @@
 package eu.tutorials.twocars.ui.screen
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.border
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.CircleShape
@@ -24,20 +15,17 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
@@ -53,53 +41,50 @@ fun OnboardingScreen(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    listOf(Color(0xFF1A1A2E), Color(0xFF16213E), Color(0xFF0F3460))
-                )
-            )
+            .background(Color(0xFF0F0F1B)) // Deep dark space background
     ) {
+        // Dynamic "Mesh" Background
+        DynamicMeshBackground()
+
         Column(
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding(),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height(48.dp))
+            Spacer(modifier = Modifier.height(24.dp))
 
-            // Title
+            // Top Progress Bar
+            OnboardingProgressBar(
+                currentPage = pagerState.currentPage,
+                totalPages = 2
+            )
+
+            Spacer(modifier = Modifier.height(32.dp))
+
+            // Premium Title
             Text(
-                text = "Collect & Dodge",
-                fontSize = 36.sp,
-                fontWeight = FontWeight.ExtraBold,
+                text = "Formula Two Cars",
+                fontSize = 32.sp,
+                fontWeight = FontWeight.Black,
                 color = Color.White,
-                textAlign = TextAlign.Center
+                textAlign = TextAlign.Center,
+                letterSpacing = 2.sp
             )
 
             Spacer(modifier = Modifier.height(8.dp))
 
-            // Page indicator dots
-            Row(
-                horizontalArrangement = Arrangement.Center,
-                modifier = Modifier.padding(8.dp)
-            ) {
-                repeat(2) { index ->
-                    Box(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp)
-                            .size(if (pagerState.currentPage == index) 10.dp else 8.dp)
-                            .clip(CircleShape)
-                            .background(
-                                if (pagerState.currentPage == index)
-                                    Color.White
-                                else
-                                    Color.White.copy(alpha = 0.3f)
-                            )
-                    )
-                }
-            }
+            Text(
+                text = if (pagerState.currentPage == 0) "MASTER THE TRACK" else "LEVEL UP YOUR GAME",
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFFF1E00).copy(alpha = 0.8f),
+                letterSpacing = 4.sp
+            )
 
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Pager
+            // Main Content Pager
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier
@@ -112,32 +97,125 @@ fun OnboardingScreen(
                 }
             }
 
-            // Bottom button
-            val isLastPage = pagerState.currentPage == 1
-            Button(
-                onClick = {
-                    if (isLastPage) {
-                        onFinished()
-                    } else {
-                        coroutineScope.launch {
-                            pagerState.animateScrollToPage(1)
-                        }
-                    }
-                },
+            // Glassmorphic Action Button
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 32.dp, vertical = 24.dp)
-                    .height(56.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (isLastPage) Color(0xFFFF1E00) else Color.White.copy(alpha = 0.2f)
-                ),
-                shape = RoundedCornerShape(16.dp)
+                    .padding(horizontal = 32.dp, vertical = 32.dp)
             ) {
-                Text(
-                    text = if (isLastPage) "🏁 Start Racing!" else "Next →",
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                val isLastPage = pagerState.currentPage == 1
+                
+                Button(
+                    onClick = {
+                        if (isLastPage) {
+                            onFinished()
+                        } else {
+                            coroutineScope.launch {
+                                pagerState.animateScrollToPage(1)
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(64.dp)
+                        .graphicsLayer {
+                            shadowElevation = 8.dp.toPx()
+                            shape = RoundedCornerShape(20.dp)
+                            clip = true
+                        },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isLastPage) Color(0xFFFF1E00) else Color.White.copy(alpha = 0.15f)
+                    ),
+                    shape = RoundedCornerShape(20.dp),
+                    border = if (!isLastPage) BorderStroke(1.dp, Color.White.copy(alpha = 0.2f)) else null
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center
+                    ) {
+                        Text(
+                            text = if (isLastPage) "START RACING" else "LEARN MORE",
+                            fontSize = 18.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color.White,
+                            letterSpacing = 1.sp
+                        )
+                        if (!isLastPage) {
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("→", fontSize = 20.sp, color = Color.White)
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun DynamicMeshBackground() {
+    val infiniteTransition = rememberInfiniteTransition(label = "mesh")
+    
+    val animOffset1 by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1000f,
+        animationSpec = infiniteRepeatable(tween(20000, easing = LinearEasing), RepeatMode.Reverse),
+        label = "offset1"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Purple glow
+        Box(
+            modifier = Modifier
+                .size(400.dp)
+                .offset(x = (-100).dp, y = 100.dp)
+                .blur(100.dp)
+                .background(Color(0xFF6D28D9).copy(alpha = 0.15f), CircleShape)
+        )
+        // Red glow
+        Box(
+            modifier = Modifier
+                .size(300.dp)
+                .align(Alignment.BottomEnd)
+                .offset(x = 50.dp, y = 50.dp)
+                .blur(80.dp)
+                .background(Color(0xFFFF1E00).copy(alpha = 0.1f), CircleShape)
+        )
+    }
+}
+
+@Composable
+private fun OnboardingProgressBar(currentPage: Int, totalPages: Int) {
+    Row(
+        modifier = Modifier
+            .padding(horizontal = 48.dp)
+            .fillMaxWidth()
+            .height(4.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        repeat(totalPages) { index ->
+            val isSelected = index <= currentPage
+            val width by animateFloatAsState(
+                targetValue = if (isSelected) 1f else 0f,
+                animationSpec = tween(500),
+                label = "progress"
+            )
+            
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .clip(CircleShape)
+                    .background(Color.White.copy(alpha = 0.1f))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(width)
+                        .fillMaxHeight()
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(Color(0xFFFF1E00), Color(0xFFFFD700))
+                            )
+                        )
                 )
             }
         }
@@ -146,257 +224,290 @@ fun OnboardingScreen(
 
 @Composable
 private fun SlideHowToPlay() {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(200)
-        visible = true
-    }
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn() + slideInVertically { it / 3 }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+        Spacer(modifier = Modifier.height(8.dp))
+        
+        // Main Control Card
+        GlassCard(
+            modifier = Modifier.fillMaxWidth()
         ) {
-            // Controls section
-            OnboardingCard(
-                emoji = "🏎️",
-                title = "Two Cars, One You",
-                content = "Tap the LEFT half of the screen to switch Car 1.\nTap the RIGHT half to switch Car 2.\nBoth cars move at the same time!"
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // What to collect
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SmallCard(
-                    emoji = "🔴",
-                    title = "Collect",
-                    content = "Drive into circles to score points. Miss one = game over!",
-                    bgColor = Color(0xFFDC0000).copy(alpha = 0.15f),
-                    modifier = Modifier.weight(1f)
-                )
-
-                SmallCard(
-                    emoji = "🟦",
-                    title = "Dodge",
-                    content = "Stay away from squares. Hit one = game over!",
-                    bgColor = Color(0xFF00BCD4).copy(alpha = 0.15f),
-                    modifier = Modifier.weight(1f)
+            Column(modifier = Modifier.padding(20.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    FloatingEmoji(emoji = "🏎️", size = 40.sp)
+                    Spacer(modifier = Modifier.width(16.dp))
+                    Text(
+                        text = "Split Decision",
+                        fontSize = 22.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                }
+                Spacer(modifier = Modifier.height(12.dp))
+                Text(
+                    text = "Control two cars simultaneously. Tap left for the red car, right for the blue car.",
+                    fontSize = 15.sp,
+                    color = Color.White.copy(alpha = 0.7f),
+                    lineHeight = 22.sp
                 )
             }
+        }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Combo hint
-            OnboardingCard(
-                emoji = "🔥",
-                title = "Build Combos!",
-                content = "Collect circles quickly for combo multipliers.\n3→2x  •  6→3x  •  10→5x"
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            MiniGlassCard(
+                emoji = "🔴",
+                title = "COLLECT",
+                description = "Hit every circle.",
+                accentColor = Color(0xFFFF1E00),
+                modifier = Modifier.weight(1f)
             )
+            MiniGlassCard(
+                emoji = "🟦",
+                title = "DODGE",
+                description = "Avoid all squares.",
+                accentColor = Color(0xFF00D2FF),
+                modifier = Modifier.weight(1f)
+            )
+        }
+
+        GlassCard(
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                modifier = Modifier.padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(48.dp)
+                        .background(Color(0xFFFFD700).copy(alpha = 0.1f), CircleShape)
+                        .border(1.dp, Color(0xFFFFD700).copy(alpha = 0.3f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text("🔥", fontSize = 24.sp)
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Column {
+                    Text(
+                        text = "Combo Multiplier",
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Chain collections to boost your score up to 5x!",
+                        fontSize = 13.sp,
+                        color = Color.White.copy(alpha = 0.6f)
+                    )
+                }
+            }
         }
     }
 }
 
 @Composable
 private fun SlideModesAndPowerUps() {
-    var visible by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        delay(200)
-        visible = true
-    }
-
-    AnimatedVisibility(
-        visible = visible,
-        enter = fadeIn() + slideInVertically { it / 3 }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 24.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Top
+        Text(
+            text = "EQUIPMENT & MODES",
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.White.copy(alpha = 0.5f),
+            letterSpacing = 2.sp
+        )
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Game Modes
-            Text(
-                text = "Game Modes",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.7f)
+            ModeCard(
+                emoji = "♾️",
+                title = "Endless",
+                modifier = Modifier.weight(1f)
             )
-
-            Spacer(modifier = Modifier.height(8.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                SmallCard(
-                    emoji = "♾️",
-                    title = "Endless",
-                    content = "Play until you crash. How far can you go?",
-                    bgColor = Color(0xFF6D28D9).copy(alpha = 0.2f),
-                    modifier = Modifier.weight(1f)
-                )
-
-                SmallCard(
-                    emoji = "⏱️",
-                    title = "Timed",
-                    content = "Survive 90 seconds and score big!",
-                    bgColor = Color(0xFFFF9800).copy(alpha = 0.2f),
-                    modifier = Modifier.weight(1f)
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Power-ups
-            Text(
-                text = "Power-Ups ⭐",
-                fontSize = 20.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White.copy(alpha = 0.7f)
+            ModeCard(
+                emoji = "⏱️",
+                title = "Timed",
+                modifier = Modifier.weight(1f)
             )
+        }
 
-            Spacer(modifier = Modifier.height(8.dp))
+        Spacer(modifier = Modifier.height(8.dp))
 
-            PowerUpRow("🛡️", "Shield", "Absorbs one hit")
-            PowerUpRow("🧲", "Magnet", "Auto-collects nearby circles")
-            PowerUpRow("🐢", "Slow-Mo", "Slows everything down")
-            PowerUpRow("💰", "2x Points", "Double your score")
-            PowerUpRow("👻", "Ghost", "Squares pass right through")
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Unlock hint
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFFFD700).copy(alpha = 0.15f)
-                ),
-                shape = RoundedCornerShape(12.dp)
-            ) {
-                Text(
-                    text = "🔓 Score points to unlock all 11 F1 teams!",
-                    modifier = Modifier
-                        .padding(12.dp)
-                        .fillMaxWidth(),
-                    color = Color(0xFFFFD700),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Bold,
-                    textAlign = TextAlign.Center
-                )
+        // Power-ups list with glassmorphism
+        GlassCard(modifier = Modifier.fillMaxWidth()) {
+            Column(modifier = Modifier.padding(8.dp)) {
+                PowerUpItem("🛡️", "Shield", "Survive one collision", Color(0xFF4FC3F7))
+                PowerUpItem("🧲", "Magnet", "Auto-pulls circles", Color(0xFFFFD700))
+                PowerUpItem("🐢", "Slow-Mo", "Temporal shift", Color(0xFFA5D6A7))
+                PowerUpItem("💰", "Bonus", "Double points active", Color(0xFFFFD54F))
             }
         }
-    }
-}
 
-@Composable
-private fun OnboardingCard(
-    emoji: String,
-    title: String,
-    content: String
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = Color.White.copy(alpha = 0.08f)
-        ),
-        shape = RoundedCornerShape(16.dp)
-    ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        // F1 Team Unlock Card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(Color(0xFF1E1E2C), Color(0xFF2D2D44))
+                    )
+                )
+                .border(
+                    BorderStroke(1.dp, Color.White.copy(alpha = 0.05f)),
+                    RoundedCornerShape(16.dp)
+                )
+                .padding(16.dp)
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(text = emoji, fontSize = 28.sp)
+                Text("🏁", fontSize = 24.sp)
                 Spacer(modifier = Modifier.width(12.dp))
                 Text(
-                    text = title,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color.White
+                    text = "Collect points to unlock 11 official F1-inspired team liveries!",
+                    fontSize = 13.sp,
+                    color = Color.White.copy(alpha = 0.9f),
+                    fontWeight = FontWeight.Medium
                 )
             }
-            Spacer(modifier = Modifier.height(8.dp))
-            Text(
-                text = content,
-                fontSize = 14.sp,
-                color = Color.White.copy(alpha = 0.8f),
-                lineHeight = 20.sp
-            )
         }
     }
 }
 
 @Composable
-private fun SmallCard(
+private fun GlassCard(
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.05f)
+        ),
+        shape = RoundedCornerShape(24.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.1f))
+    ) {
+        content()
+    }
+}
+
+@Composable
+private fun MiniGlassCard(
     emoji: String,
     title: String,
-    content: String,
-    bgColor: Color,
+    description: String,
+    accentColor: Color,
     modifier: Modifier = Modifier
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = bgColor),
-        shape = RoundedCornerShape(12.dp)
+        colors = CardDefaults.cardColors(
+            containerColor = Color.White.copy(alpha = 0.05f)
+        ),
+        shape = RoundedCornerShape(20.dp),
+        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f))
     ) {
         Column(
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Text(text = emoji, fontSize = 32.sp)
-            Spacer(modifier = Modifier.height(4.dp))
+            Text(text = emoji, fontSize = 28.sp)
+            Spacer(modifier = Modifier.height(12.dp))
             Text(
                 text = title,
-                fontSize = 16.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.White,
-                textAlign = TextAlign.Center
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Black,
+                color = accentColor
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = content,
-                fontSize = 12.sp,
-                color = Color.White.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center,
-                lineHeight = 16.sp
+                text = description,
+                fontSize = 11.sp,
+                color = Color.White.copy(alpha = 0.5f),
+                textAlign = TextAlign.Center
             )
         }
     }
 }
 
 @Composable
-private fun PowerUpRow(emoji: String, name: String, description: String) {
+private fun ModeCard(emoji: String, title: String, modifier: Modifier) {
+    Box(
+        modifier = modifier
+            .clip(RoundedCornerShape(16.dp))
+            .background(Color.White.copy(alpha = 0.05f))
+            .border(BorderStroke(1.dp, Color.White.copy(alpha = 0.1f)), RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        contentAlignment = Alignment.Center
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(emoji, fontSize = 20.sp)
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun PowerUpItem(emoji: String, name: String, desc: String, color: Color) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 3.dp)
-            .background(Color.White.copy(alpha = 0.05f), RoundedCornerShape(8.dp))
-            .padding(horizontal = 12.dp, vertical = 8.dp),
+            .padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(text = emoji, fontSize = 20.sp)
+        Box(
+            modifier = Modifier
+                .size(36.dp)
+                .background(color.copy(alpha = 0.1f), CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(emoji, fontSize = 18.sp)
+        }
         Spacer(modifier = Modifier.width(12.dp))
-        Text(
-            text = name,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.Bold,
-            color = Color.White,
-            modifier = Modifier.width(80.dp)
-        )
-        Text(
-            text = description,
-            fontSize = 13.sp,
-            color = Color.White.copy(alpha = 0.7f)
-        )
+        Column {
+            Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(desc, color = Color.White.copy(alpha = 0.4f), fontSize = 11.sp)
+        }
     }
+}
+
+@Composable
+private fun FloatingEmoji(emoji: String, size: androidx.compose.ui.unit.TextUnit) {
+    val infiniteTransition = rememberInfiniteTransition(label = "floating")
+    val yOffset by infiniteTransition.animateFloat(
+        initialValue = -4f,
+        targetValue = 4f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "yOffset"
+    )
+    
+    Text(
+        text = emoji,
+        fontSize = size,
+        modifier = Modifier.offset(y = yOffset.dp)
+    )
+}
+
+@Preview(showBackground = true)
+@Composable
+fun OnboardingScreenPreview(modifier: Modifier = Modifier) {
+    OnboardingScreen {  }
 }
