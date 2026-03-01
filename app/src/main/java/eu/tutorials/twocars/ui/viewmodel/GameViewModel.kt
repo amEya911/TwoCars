@@ -18,7 +18,6 @@ import eu.tutorials.twocars.data.state.GameState
 import eu.tutorials.twocars.data.state.Shape
 import eu.tutorials.twocars.data.state.ShapeType
 import eu.tutorials.twocars.util.FirebaseUtils
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.first
@@ -40,7 +39,10 @@ class GameViewModel @Inject constructor(
 
     private var currentTeamId: String? = null
     private var gameModeInitialized = false
-    private var timerStarted = false
+
+    // Timing state tracking
+    private var timeSinceLastSpawnMs = 0f
+    private var timeSinceLastTimerTickMs = 0f
 
     init {
         viewModelScope.launch {
@@ -48,8 +50,6 @@ class GameViewModel @Inject constructor(
                 _gameState.value = _gameState.value.copy(highScore = highScore)
             }
         }
-        startGameLoop()
-        startEffectsLoop()
     }
 
     fun setTeamId(teamId: String?) {
@@ -70,43 +70,6 @@ class GameViewModel @Inject constructor(
             gameMode = mode,
             remainingTimeMs = if (mode == GameMode.TIMED_CHALLENGE) 90_000L else 0L
         )
-        if (mode == GameMode.TIMED_CHALLENGE) {
-            startTimer()
-        }
-    }
-
-    private fun startTimer() {
-        if (timerStarted) return
-        timerStarted = true
-        viewModelScope.launch {
-            while (!_gameState.value.isGameOver && !_gameState.value.isVictory) {
-                delay(1000L)
-                if (_gameState.value.gameMode == GameMode.TIMED_CHALLENGE) {
-                    onEvent(GameEvent.OnTimerTick)
-                }
-            }
-        }
-    }
-
-    private fun startGameLoop() {
-        viewModelScope.launch {
-            while (true) {
-                if (!_gameState.value.isGameOver && !_gameState.value.isVictory) {
-                    onEvent(GameEvent.OnSpawnShape)
-                }
-                val currentSep = getCurrentSeparationTime()
-                delay(Random.nextLong(100, currentSep))
-            }
-        }
-    }
-
-    private fun startEffectsLoop() {
-        viewModelScope.launch {
-            while (true) {
-                delay(50L)
-                onEvent(GameEvent.OnUpdateEffects)
-            }
-        }
     }
 
     private fun getCurrentSeparationTime(): Long {
@@ -134,10 +97,141 @@ class GameViewModel @Inject constructor(
         }
     }
 
+    // --- Core Game Loop ---
+    fun update(deltaTimeMs: Float) {
+        val state = _gameState.value
+        if (state.isGameOver || state.isVictory) return
+
+        var nextState = state
+        val currentTime = System.currentTimeMillis()
+
+        // 1. Handle Spawning
+        timeSinceLastSpawnMs += deltaTimeMs
+        val currentSep = getCurrentSeparationTime()
+        // We add some variation to spawn timing to make it feel natural
+        if (timeSinceLastSpawnMs >= currentSep + Random.nextLong(100)) {
+            nextState = handleSpawnShape(nextState, currentTime, currentSep)
+            timeSinceLastSpawnMs = 0f
+        }
+
+        // 2. Handle Movement Logic
+        // duration indicates how long a shape takes to reach the bottom (y=1f)
+        val duration = currentSep * 4f 
+        val moveDelta = deltaTimeMs / duration
+        var isGameOverTriggered = false
+        var gameOverShapeId: String? = null
+
+        val updatedShapes = nextState.shapes.mapNotNull { shape ->
+            val newY = shape.yOffset + moveDelta
+
+            // Pass check at 0.925
+            val hasPassed = newY >= 0.925f
+            val justPassed = hasPassed && !shape.nearMissChecked // use this flag internally for checking
+
+            if (justPassed && shape.type == ShapeType.COLLECT && !shape.passed) {
+                // If magnet is active, auto-collect
+                val isMagnetActive = state.activePowerUp == PowerUpType.MAGNET &&
+                        currentTime < state.powerUpExpiryTime
+                
+                if (isMagnetActive) {
+                    handleMarkCirclePassed(GameEvent.OnMarkCirclePassed(shape.id))
+                    // State will be updated via flow, next iteration will handle it cleanly
+                    // but for this list mapping, we drop the shape since it's collected.
+                    return@mapNotNull null
+                } else {
+                    // Missed collectable
+                    isGameOverTriggered = true
+                    gameOverShapeId = shape.id
+                }
+            }
+
+            if (newY >= 1f) {
+                // Shape fell off screen
+                if (shape.type == ShapeType.COLLECT && !shape.passed && !isGameOverTriggered) {
+                     val isMagnetActive = state.activePowerUp == PowerUpType.MAGNET &&
+                        currentTime < state.powerUpExpiryTime
+                     if (!isMagnetActive) {
+                        isGameOverTriggered = true
+                        gameOverShapeId = shape.id
+                     }
+                }
+                null // remove from list
+            } else {
+                shape.copy(
+                    yOffset = newY,
+                    nearMissChecked = hasPassed
+                )
+            }
+        }
+
+        // 3. Effects & Timers
+        val aliveParticles = nextState.particles.filter { it.isAlive }.map {
+            val elapsed = currentTime - it.createdAt
+            it.copy(
+                position = Offset(
+                    it.position.x + it.velocity.x * (deltaTimeMs / 16f) * 0.05f,
+                    it.position.y + it.velocity.y * (deltaTimeMs / 16f) * 0.05f
+                )
+            )
+        }
+
+        val alivePopups = nextState.scorePopups.filter { it.isAlive }
+        val aliveNearMiss = nextState.nearMissEvents.filter { it.isAlive }
+
+        val shakeActive = nextState.screenShakeActive &&
+                currentTime - nextState.screenShakeStartTime < 300L
+
+        val powerUpExpired = nextState.activePowerUp != null &&
+                nextState.activePowerUp != PowerUpType.SHIELD &&
+                currentTime >= nextState.powerUpExpiryTime
+
+        val comboExpired = nextState.comboCount > 0 &&
+                currentTime - nextState.lastCollectTimeMs > nextState.comboWindowMs
+
+        nextState = nextState.copy(
+            shapes = updatedShapes,
+            particles = aliveParticles,
+            scorePopups = alivePopups,
+            nearMissEvents = aliveNearMiss,
+            screenShakeActive = shakeActive,
+            activePowerUp = if (powerUpExpired) null else nextState.activePowerUp,
+            powerUpExpiryTime = if (powerUpExpired) 0L else nextState.powerUpExpiryTime,
+            comboCount = if (comboExpired) 0 else nextState.comboCount,
+            comboMultiplier = if (comboExpired) 1 else nextState.comboMultiplier
+        )
+        
+        // 4. Game clock for Timed Mode
+        if (nextState.gameMode == GameMode.TIMED_CHALLENGE) {
+            timeSinceLastTimerTickMs += deltaTimeMs
+            if (timeSinceLastTimerTickMs >= 1000f) {
+                timeSinceLastTimerTickMs -= 1000f
+                val newTime = nextState.remainingTimeMs - 1000L
+                if (newTime <= 0L) {
+                    handleVictory(nextState)
+                    return // State is updated inside handleVictory
+                } else {
+                    nextState = nextState.copy(remainingTimeMs = newTime)
+                }
+            }
+        }
+
+        _gameState.value = nextState
+
+        if (isGameOverTriggered && gameOverShapeId != null) {
+             onEvent(GameEvent.OnGameOver(gameOverShapeId!!))
+        }
+    }
+
+
     fun onEvent(event: GameEvent) {
+        // Certain events can still be handled identically
         when (event) {
-            is GameEvent.OnSpawnShape -> handleSpawnShape()
-            is GameEvent.OnUpdateShapePosition -> handleUpdatePosition(event)
+            // Deprecated events no longer used natively by UI, replaced by update loop:
+            is GameEvent.OnSpawnShape -> {}
+            is GameEvent.OnUpdateShapePosition -> {}
+            is GameEvent.OnUpdateEffects -> {}
+            is GameEvent.OnTimerTick -> {}
+            
             is GameEvent.OnRemoveShape -> handleRemoveShape(event)
             is GameEvent.OnSwitchLane -> handleSwitchLane(event)
             is GameEvent.OnGameOver -> handleGameOver(event)
@@ -146,16 +240,10 @@ class GameViewModel @Inject constructor(
             is GameEvent.OnCollectPowerUp -> handleCollectPowerUp(event)
             is GameEvent.OnNearMiss -> handleNearMiss(event)
             is GameEvent.OnSetGameMode -> setGameMode(event.mode)
-            is GameEvent.OnTimerTick -> handleTimerTick()
-            is GameEvent.OnUpdateEffects -> handleUpdateEffects()
         }
     }
 
-    private fun handleSpawnShape() {
-        val currentTime = System.currentTimeMillis()
-        val state = _gameState.value
-        val currentSep = getCurrentSeparationTime()
-
+    private fun handleSpawnShape(state: GameState, currentTime: Long, currentSep: Long): GameState {
         val blockedLanes = state.shapes
             .filter { currentTime - it.spawnTimeMillis <= currentSep }
             .flatMap {
@@ -171,7 +259,6 @@ class GameViewModel @Inject constructor(
         if (availableLanes.isNotEmpty()) {
             val chosenLane = availableLanes.random()
 
-            // Determine shape type: 8% power-up, then increasing dodge ratio
             val rand = Random.nextFloat()
             val dodgeRatio = when {
                 state.score >= 300 -> 0.65f
@@ -191,19 +278,11 @@ class GameViewModel @Inject constructor(
                 lane = chosenLane,
                 spawnTimeMillis = currentTime
             )
-            _gameState.value = state.copy(
+            return state.copy(
                 shapes = state.shapes + shape
             )
-            animateShapeDown(shape)
         }
-    }
-
-    private fun handleUpdatePosition(event: GameEvent.OnUpdateShapePosition) {
-        _gameState.value = _gameState.value.copy(
-            shapes = _gameState.value.shapes.map {
-                if (it.id == event.id) it.copy(yOffset = event.offset) else it
-            }
-        )
+        return state
     }
 
     private fun handleRemoveShape(event: GameEvent.OnRemoveShape) {
@@ -229,19 +308,16 @@ class GameViewModel @Inject constructor(
     private fun handleGameOver(event: GameEvent.OnGameOver) {
         val state = _gameState.value
 
-        // Shield power-up: absorb hit instead of game over
         if (state.shieldActive) {
             _gameState.value = state.copy(
                 shieldActive = false,
                 activePowerUp = null,
                 shapes = state.shapes.filterNot { it.id == event.shapeId }
             )
-            // Spawn shield-break particles
             spawnParticles(0f, 0f, Color(0xFF4FC3F7), 8)
             return
         }
 
-        // Ghost power-up: squares pass through
         if (state.activePowerUp == PowerUpType.GHOST &&
             System.currentTimeMillis() < state.powerUpExpiryTime
         ) {
@@ -254,18 +330,24 @@ class GameViewModel @Inject constructor(
             }
         }
 
+        processEndGameStats(state, isVictory = false, gameOverShapeId = event.shapeId)
+    }
+
+    private fun handleVictory(state: GameState) {
+        processEndGameStats(state, isVictory = true, gameOverShapeId = null)
+    }
+
+    private fun processEndGameStats(state: GameState, isVictory: Boolean, gameOverShapeId: String?) {
         val currentScore = state.score
         val survivalTime = System.currentTimeMillis() - state.runStats.startTimeMs
         val updatedStats = state.runStats.copy(survivalTimeMs = survivalTime)
 
         viewModelScope.launch {
-            // Save global high score
             val savedHighScore = dataStore.getData(DataStore.HIGH_SCORE_KEY, 0L).first()
             if (currentScore > savedHighScore) {
                 dataStore.saveData(DataStore.HIGH_SCORE_KEY, currentScore)
             }
 
-            // Save per-team high score
             currentTeamId?.let { teamId ->
                 val teamHighScore = dataStore.getData(DataStore.highScoreKeyForTeam(teamId), 0L).first()
                 if (currentScore > teamHighScore) {
@@ -273,20 +355,17 @@ class GameViewModel @Inject constructor(
                 }
             }
 
-            // Add to cumulative score
             dataStore.addCumulativeScore(currentScore)
-
-            // Check and award achievements
             checkAndAwardAchievements(updatedStats, currentScore)
-
-            // Check team unlocks
             checkTeamUnlocks()
         }
 
         _gameState.value = state.copy(
-            isGameOver = true,
-            gameOverShapeId = event.shapeId,
-            screenShakeActive = true,
+            isGameOver = !isVictory,
+            isVictory = isVictory,
+            gameOverShapeId = gameOverShapeId,
+            remainingTimeMs = if (isVictory) 0L else state.remainingTimeMs,
+            screenShakeActive = !isVictory,
             screenShakeStartTime = System.currentTimeMillis(),
             runStats = updatedStats
         )
@@ -296,7 +375,6 @@ class GameViewModel @Inject constructor(
         val state = _gameState.value
         val currentTime = System.currentTimeMillis()
 
-        // Check combo
         val timeSinceLastCollect = currentTime - state.lastCollectTimeMs
         val newComboCount = if (timeSinceLastCollect <= state.comboWindowMs) {
             state.comboCount + 1
@@ -311,7 +389,6 @@ class GameViewModel @Inject constructor(
             else -> 1
         }
 
-        // Apply double points power-up
         val pointMultiplier = if (state.activePowerUp == PowerUpType.DOUBLE_POINTS &&
             currentTime < state.powerUpExpiryTime
         ) {
@@ -326,7 +403,6 @@ class GameViewModel @Inject constructor(
         val newSeparationTime = getCurrentSeparationTime()
         val longestCombo = maxOf(state.runStats.longestCombo, newComboCount)
 
-        // Spawn score popup
         val shape = state.shapes.find { it.id == event.id }
         val newId = state.nextEffectId
 
@@ -340,7 +416,6 @@ class GameViewModel @Inject constructor(
             )
         } else state.scorePopups
 
-        // Spawn collect particles
         val newParticles = if (shape != null) {
             state.particles + generateParticles(
                 newId + 1, 0f, shape.yOffset, Color.Red, 6
@@ -348,9 +423,7 @@ class GameViewModel @Inject constructor(
         } else state.particles
 
         _gameState.value = state.copy(
-            shapes = state.shapes.map {
-                if (it.id == event.id) it.copy(passed = true) else it
-            },
+            shapes = state.shapes.filterNot { it.id == event.id },
             score = newScore,
             separationTime = newSeparationTime,
             comboCount = newComboCount,
@@ -373,7 +446,6 @@ class GameViewModel @Inject constructor(
         val isShield = event.powerUpType == PowerUpType.SHIELD
         val expiryTime = if (isShield) 0L else currentTime + event.powerUpType.durationMs
 
-        // Spawn power-up particles
         val shape = state.shapes.find { it.id == event.id }
         val newId = state.nextEffectId
         val newParticles = if (shape != null) {
@@ -407,7 +479,6 @@ class GameViewModel @Inject constructor(
         val state = _gameState.value
         val newId = state.nextEffectId
 
-        // Award 2 bonus points for near misses
         val bonusPoints = 2L * state.comboMultiplier
 
         _gameState.value = state.copy(
@@ -429,155 +500,15 @@ class GameViewModel @Inject constructor(
         )
     }
 
-    private fun handleTimerTick() {
-        val state = _gameState.value
-        if (state.gameMode != GameMode.TIMED_CHALLENGE) return
-
-        val newTime = state.remainingTimeMs - 1000L
-        if (newTime <= 0L) {
-            // Victory!
-            val survivalTime = System.currentTimeMillis() - state.runStats.startTimeMs
-            val updatedStats = state.runStats.copy(survivalTimeMs = survivalTime)
-
-            viewModelScope.launch {
-                val currentScore = state.score
-                val savedHighScore = dataStore.getData(DataStore.HIGH_SCORE_KEY, 0L).first()
-                if (currentScore > savedHighScore) {
-                    dataStore.saveData(DataStore.HIGH_SCORE_KEY, currentScore)
-                }
-                currentTeamId?.let { teamId ->
-                    val teamHighScore = dataStore.getData(DataStore.highScoreKeyForTeam(teamId), 0L).first()
-                    if (currentScore > teamHighScore) {
-                        dataStore.saveData(DataStore.highScoreKeyForTeam(teamId), currentScore)
-                    }
-                }
-                dataStore.addCumulativeScore(currentScore)
-                checkAndAwardAchievements(updatedStats, currentScore)
-                checkTeamUnlocks()
-            }
-
-            _gameState.value = state.copy(
-                isVictory = true,
-                remainingTimeMs = 0L,
-                runStats = updatedStats
-            )
-        } else {
-            _gameState.value = state.copy(remainingTimeMs = newTime)
-        }
-    }
-
-    private fun handleUpdateEffects() {
-        val state = _gameState.value
-
-        // Clean up expired effects
-        val aliveParticles = state.particles.filter { it.isAlive }
-        val alivePopups = state.scorePopups.filter { it.isAlive }
-        val aliveNearMiss = state.nearMissEvents.filter { it.isAlive }
-
-        // Update particle positions
-        val movedParticles = aliveParticles.map {
-            val elapsed = System.currentTimeMillis() - it.createdAt
-            val t = elapsed / it.lifetimeMs.toFloat()
-            it.copy(
-                position = Offset(
-                    it.position.x + it.velocity.x * 0.05f,
-                    it.position.y + it.velocity.y * 0.05f
-                )
-            )
-        }
-
-        // Check if screen shake should end (300ms duration)
-        val shakeActive = state.screenShakeActive &&
-                System.currentTimeMillis() - state.screenShakeStartTime < 300L
-
-        // Expire power-up
-        val currentTime = System.currentTimeMillis()
-        val powerUpExpired = state.activePowerUp != null &&
-                state.activePowerUp != PowerUpType.SHIELD &&
-                currentTime >= state.powerUpExpiryTime
-
-        // Check combo expiry
-        val comboExpired = state.comboCount > 0 &&
-                currentTime - state.lastCollectTimeMs > state.comboWindowMs
-
-        _gameState.value = state.copy(
-            particles = movedParticles,
-            scorePopups = alivePopups,
-            nearMissEvents = aliveNearMiss,
-            screenShakeActive = shakeActive,
-            activePowerUp = if (powerUpExpired) null else state.activePowerUp,
-            powerUpExpiryTime = if (powerUpExpired) 0L else state.powerUpExpiryTime,
-            comboCount = if (comboExpired) 0 else state.comboCount,
-            comboMultiplier = if (comboExpired) 1 else state.comboMultiplier
-        )
-    }
-
     private fun handleResetGame() {
+        timeSinceLastSpawnMs = 0f
+        timeSinceLastTimerTickMs = 0f
         _gameState.value = GameState(
             highScore = _gameState.value.highScore,
             separationTime = baseSeparationTime,
             gameMode = _gameState.value.gameMode,
             remainingTimeMs = if (_gameState.value.gameMode == GameMode.TIMED_CHALLENGE) 90_000L else 0L
         )
-        if (_gameState.value.gameMode == GameMode.TIMED_CHALLENGE) {
-            timerStarted = false
-            startTimer()
-        }
-    }
-
-    private fun animateShapeDown(shape: Shape) {
-        viewModelScope.launch {
-            var previousTime = System.currentTimeMillis()
-            var currentProgress = 0f
-            var isMissChecked = false
-
-            while (currentProgress < 1f && !_gameState.value.isGameOver && !_gameState.value.isVictory) {
-                val currentTime = System.currentTimeMillis()
-                val deltaTime = (currentTime - previousTime).toFloat()
-
-                val duration = getCurrentSeparationTime() * 4
-                currentProgress += deltaTime / duration
-                currentProgress = currentProgress.coerceIn(0f, 1f)
-
-                onEvent(
-                    GameEvent.OnUpdateShapePosition(
-                        id = shape.id,
-                        offset = currentProgress
-                    )
-                )
-
-                if (currentProgress >= 0.925f && !isMissChecked) {
-                    isMissChecked = true
-                    val currentShape = _gameState.value.shapes.find { it.id == shape.id }
-                    if (currentShape != null && currentShape.type == ShapeType.COLLECT && !currentShape.passed) {
-                        // If magnet is active, don't penalize for missing — just let it pass
-                        val isMagnetActive = _gameState.value.activePowerUp == PowerUpType.MAGNET &&
-                                System.currentTimeMillis() < _gameState.value.powerUpExpiryTime
-                        if (!isMagnetActive) {
-                            onEvent(GameEvent.OnGameOver(shape.id))
-                            break
-                        }
-                    }
-                }
-
-                previousTime = currentTime
-                delay(16)
-            }
-
-            if (currentProgress >= 1f) {
-                val finalShape = _gameState.value.shapes.find { it.id == shape.id }
-                if (finalShape != null) {
-                    if (finalShape.type == ShapeType.COLLECT && !finalShape.passed) {
-                        val isMagnetActive = _gameState.value.activePowerUp == PowerUpType.MAGNET &&
-                                System.currentTimeMillis() < _gameState.value.powerUpExpiryTime
-                        if (!isMagnetActive) {
-                            onEvent(GameEvent.OnGameOver(shape.id))
-                        }
-                    }
-                    onEvent(GameEvent.OnRemoveShape(shape.id))
-                }
-            }
-        }
     }
 
     // --- Helper functions ---
@@ -637,21 +568,18 @@ class GameViewModel @Inject constructor(
     private suspend fun checkTeamUnlocks() {
         val cumulativeScore = dataStore.getData(DataStore.CUMULATIVE_SCORE_KEY, 0L).first()
 
-        // Team unlock thresholds based on 2025 Constructors' Championship standings
-        // Bottom teams (new/lower standings) = easier to unlock
-        // Top teams (championship leaders) = hardest to unlock
         val teamUnlocks = mapOf(
-            "cadillac" to 0L,         // New team (11th) — free starter
-            "audi" to 100L,           // Was Kick Sauber (10th in 2025)
-            "williams" to 250L,       // 9th in 2025
-            "racing_bulls" to 500L,   // 8th in 2025
-            "haas" to 800L,           // 7th in 2025
-            "alpine" to 1200L,        // 6th in 2025
-            "aston_martin" to 1800L,  // 5th in 2025
-            "mercedes" to 2500L,      // 4th in 2025
-            "red_bull" to 3500L,      // 3rd in 2025
-            "ferrari" to 5000L,       // 2nd in 2025
-            "mclaren" to 7500L        // 1st in 2025 (Champions)
+            "cadillac" to 0L,         
+            "audi" to 100L,           
+            "williams" to 250L,       
+            "racing_bulls" to 500L,   
+            "haas" to 800L,           
+            "alpine" to 1200L,        
+            "aston_martin" to 1800L,  
+            "mercedes" to 2500L,      
+            "red_bull" to 3500L,      
+            "ferrari" to 5000L,       
+            "mclaren" to 7500L        
         )
 
         teamUnlocks.forEach { (teamId, threshold) ->

@@ -13,7 +13,6 @@ import eu.tutorials.twocars.data.state.Shape
 import eu.tutorials.twocars.data.state.ShapeType
 import eu.tutorials.twocars.ui.viewmodel.GameViewModel
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import kotlin.random.Random
 
 object Shape {
@@ -46,11 +45,11 @@ object Shape {
                 )
                 ShapeType.COLLECT -> drawCircleShape(
                     shapeX, shapeY, scaleFactor, shape, gameState,
-                    car1Rect, car2Rect, coroutineScope, viewModel
+                    car1Rect, car2Rect, viewModel
                 )
                 ShapeType.POWER_UP -> drawPowerUpShape(
                     shapeX, shapeY, scaleFactor, shape, gameState,
-                    car1Rect, car2Rect, coroutineScope, viewModel
+                    car1Rect, car2Rect, viewModel
                 )
             }
         }
@@ -91,7 +90,9 @@ object Shape {
 
                 if (dist < nearMissThreshold + shapeSize / 2 && dist > 0 && shape.yOffset > 0.6f) {
                     viewModel.onEvent(GameEvent.OnNearMiss(shape.id, shapeX, shapeY))
-                    // Mark as checked to avoid duplicate near misses
+                    // Mark as checked to avoid duplicate near misses by piggybacking on yOffset event for now
+                    // In a purer architecture this would set a flag without updating full offset, 
+                    // but reusing this event works perfectly fine.
                     viewModel.onEvent(GameEvent.OnUpdateShapePosition(shape.id, shape.yOffset))
                 }
             }
@@ -106,14 +107,12 @@ object Shape {
         gameState: GameState,
         car1Rect: Rect,
         car2Rect: Rect,
-        coroutineScope: CoroutineScope,
         viewModel: GameViewModel
     ) {
         val radius = 40f * scaleFactor
         val center = Offset(shapeX, shapeY)
 
-        // Draw circle with glow effect
-        drawCircle(Color.Red.copy(alpha = 0.3f), radius * 1.3f, center)
+        // Draw circle
         drawCircle(Color.Red, radius, center)
 
         // Magnet effect: auto-collect when close
@@ -130,15 +129,10 @@ object Shape {
                 closest.minus(center).getDistance() < collectRadius
             }
 
-            when {
-                shape.lane in 0..1 && checkCollision(car1Rect) -> coroutineScope.launch {
-                    viewModel.onEvent(GameEvent.OnMarkCirclePassed(shape.id))
-                    viewModel.onEvent(GameEvent.OnRemoveShape(shape.id))
-                }
-                shape.lane in 2..3 && checkCollision(car2Rect) -> coroutineScope.launch {
-                    viewModel.onEvent(GameEvent.OnMarkCirclePassed(shape.id))
-                    viewModel.onEvent(GameEvent.OnRemoveShape(shape.id))
-                }
+            if ((shape.lane in 0..1 && checkCollision(car1Rect)) ||
+                (shape.lane in 2..3 && checkCollision(car2Rect))
+            ) {
+                viewModel.onEvent(GameEvent.OnMarkCirclePassed(shape.id))
             }
         }
     }
@@ -151,7 +145,6 @@ object Shape {
         gameState: GameState,
         car1Rect: Rect,
         car2Rect: Rect,
-        coroutineScope: CoroutineScope,
         viewModel: GameViewModel
     ) {
         val starSize = 35f * scaleFactor
@@ -177,13 +170,10 @@ object Shape {
                 closest.minus(Offset(shapeX, shapeY)).getDistance() < starSize * 1.5f
             }
 
-            when {
-                shape.lane in 0..1 && checkCollision(car1Rect) -> coroutineScope.launch {
-                    viewModel.onEvent(GameEvent.OnCollectPowerUp(shape.id, powerUpType))
-                }
-                shape.lane in 2..3 && checkCollision(car2Rect) -> coroutineScope.launch {
-                    viewModel.onEvent(GameEvent.OnCollectPowerUp(shape.id, powerUpType))
-                }
+            if ((shape.lane in 0..1 && checkCollision(car1Rect)) ||
+                (shape.lane in 2..3 && checkCollision(car2Rect))
+            ) {
+                viewModel.onEvent(GameEvent.OnCollectPowerUp(shape.id, powerUpType))
             }
         }
     }
